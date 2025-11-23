@@ -88,5 +88,5 @@ class Tableau:
             cards = repeat(cards)
         if type(states) == int:
             states = repeat(states)
-        for p, c, s in zip(p, c, s):
-            self.add_entry_to_grid(p, c, s)
+        for l, c, s in zip(locations, cards, states):
+            self.add_entry_to_grid(l, c, s)
