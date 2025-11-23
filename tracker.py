@@ -1,5 +1,6 @@
-from itertools import chain
+from itertools import chain, repeat
 from utils import input_unsigned_int
+from tableau import Tableau
 
 num_players = input_unsigned_int("How many players?: ", lb=3, ub=7, err="Please input a number from 3 to 6")
 
@@ -9,6 +10,11 @@ user_player = input_unsigned_int("What player number are you (player 1 takes the
 characters = ["Miss Scarlett", "Colonel Mustard", "Mrs. White", "Mr. Green", "Mrs. Peacock", "Professor Plum"]
 weapons = ["Candlestick", "Knife", "Lead Pipe", "Revolver", "Rope", "Wrench"]
 locations = ["Ballroom", "Billiard Room", "Conservatory", "Dining Room", "Hall", "Kitchen", "Lounge", "Library", "Study"]
+
+catagories = [characters, weapons, locations]
+
+card_to_catagory = [c for c, _ in chain(*[zip(repeat(i), c) for i, c in enumerate(catagories)])]
+print(card_to_catagory)
 
 num_cards_in_play = len(characters) + len(weapons) + len(locations) - 3
 num_cards_per_hand = num_cards_in_play // num_players
@@ -30,3 +36,5 @@ if num_leftover_cards > 0:
                 print("That leftover card has already been input. Please input the next one.")
                 card = None
         leftover_cards.append(card)
+
+t = Tableau(num_players, card_to_catagory)
