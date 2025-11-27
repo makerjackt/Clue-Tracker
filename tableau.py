@@ -49,40 +49,24 @@ class Tableau:
             # If a card location is known, then all other locations cannot have that card
             self._grid[location][card] = state
             self.add_entries_to_grid([l for l in range(-1, self._num_players + 1) if l != location], card, -1)
+            self._row_states[card] = True
+            # that row is now completed
         else:
             # if there aren't at least two spots left, then since we checked above that this is new information
             # there is only one spot left which cannot be marked as -1
-            assert len(self.open_in_row(card)) >= 2, \
+            assert len(self.search_row(card, (0, 1))) >= 2, \
             f"Tableau given information that prevents card {card} from being in any location"
             if location == -1:
-                assert len(self.open_in_column(location)) > self._num_leftover_cards, \
+                assert len(self.search_column(location, (0, 1))) > self._num_leftover_cards, \
                 "Tableau given information that eliminates too many cards from being leftover"
             elif location == 0:
                 catagory = self._card_to_catagory[card]
-                assert len([c for c in self.open_in_column(location) if self._card_to_catagory[c] == catagory]) > 1, \
+                assert len([c for c in self.search_column(location, (0, 1)) if self._card_to_catagory[c] == catagory]) > 1, \
                 f"Tableau given information that elminates all cards in {catagory} from secret envelope"
             else:
-                assert len(self.open_in_column(location)) > self._hand_size, \
+                assert len(self.search_column(location, (0, 1))) > self._hand_size, \
                 f"Tableau given information that prevents player {location} from having {self._hand_size} cards"
             self._grid[location][card] = state
-    def check_grid(self, location, card):
-        return self._grid[location][card]
-    def print_grid(self):
-        for c in range(self._num_cards):
-            for l in range(-1, self._num_players + 1):
-                s = str(self._grid[l][c])
-                if len(s) == 1:
-                    s = " " + s
-                print(s, end = "  ")
-            print()
-    def search_column(self, location, condition):
-        # condition int or tuple of ints
-        return [c for c in range(self._num_cards) 
-                if (self._grid[location][c] == condition if type(condition) == int else self._grid[location][c] in condition)]
-    def search_row(self, card, condition):
-        # condition int or tuple of ints
-        return [l for l in range(-1, self._num_players + 1) 
-                if (self._grid[l][card] == condition if type(condition) == int else self._grid[l][card] in condition)]
     def add_entries_to_grid(self, locations, cards, states):
         # At least one of players, cards, states should be iterable 
         assert type(locations) != int or type(cards) != int or type(states) != int, "add_entries_to_grid not given any iterables"
@@ -94,6 +78,37 @@ class Tableau:
             states = repeat(states)
         for l, c, s in zip(locations, cards, states):
             self.add_entry_to_grid(l, c, s)
+    def check_grid(self, location, card):
+        return self._grid[location][card]
+    def print_grid(self):
+        print(6 * " ", end = "")
+        for l in range(-1, self._num_players + 1):
+            s = str(self._column_states[l])
+            if self._column_states[l]:
+                s = " " + s
+            print(s, end = "  ")
+        print()
+        for c in range(self._num_cards):
+            s = str(self._row_states[c])
+            if self._row_states[c]:
+                s = " " + s
+            print(s, end = "  ")
+            for l in range(-1, self._num_players + 1):
+                s = 3 * " " + str(self._grid[l][c])
+                if self._grid[l][c] in (0, 1):
+                    s = " " + s
+                print(s, end = "  ")
+            print()
+    def search_column(self, location, condition):
+        # condition int or tuple of ints
+        return [c for c in range(self._num_cards) 
+                if (self._grid[location][c] == condition if type(condition) == int else self._grid[location][c] in condition)]
+    def search_row(self, card, condition):
+        # condition int or tuple of ints
+        return [l for l in range(-1, self._num_players + 1) 
+                if (self._grid[l][card] == condition if type(condition) == int else self._grid[l][card] in condition)]
+    def unkown_cards(self):
+        return [c for c in range(self._num_cards) if not self._row_states[c]]
     def iterate_leftover(self) -> bool:
         # Returns true if new information is found
         if self._column_states[-1]:
@@ -169,8 +184,14 @@ class Tableau:
                     iterated = True
         self._column_states[0] = all_catagories_complete # only true after iteration if all catagories are complete
         return iterated
-    def satisfy_players(self) -> bool:
+    def iterate_cards(self) -> bool:
         pass
+    def satisfy_players(self) -> bool:
+        for p in range(1, self._num_players + 1):
+            if len(self._conditions[p]) == 0:
+                # if there are no conditions, any assignment is valid
+                continue
+            unkown_cards = self.unkown_cards()
     def satisfy_collective(self) -> bool:
         pass
     def update(self):
@@ -188,6 +209,9 @@ class Tableau:
             # do basic checks on each player column
             if self.iterate_players():
                 continue
+            # check each card to see if the possible locations it can be have dropped to 1
+            if self.iterate_cards():
+                continue
             # checks conditions on each individual players hand to see if any information can be found
             # e.g. A player must have a certain card in their hand, or they must not have a certain card
             if self.satisfy_players():
@@ -197,4 +221,5 @@ class Tableau:
             # a certain player must not have a certain card in their hand
             if self.satisfy_collective():
                 continue
+            break
 
