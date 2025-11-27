@@ -27,18 +27,20 @@ for i, name in enumerate(chain(characters, weapons, locations)):
 
 tableau = Tableau(num_players, card_to_catagory)
 
-leftover_cards = []
+
 if num_leftover_cards > 0:
     print("Please input the leftover cards that were revealed to everyone, one at a time below:")
     for i in range(num_leftover_cards):
         card = None
         while card == None:
-            card = input_unsigned_int(f"Input leftover card numer {i + 1}: ", lb=0, ub=num_cards, 
+            card = input_unsigned_int(f"Input leftover card number {i + 1}: ", lb=0, ub=num_cards, 
                                       err=f"Please input a number from 0 to {num_cards - 1}")
-            if card in leftover_cards:
+            if tableau.check_grid(-1, card) == 1:
                 print("That leftover card has already been input. Please input the next one.")
                 card = None
-        leftover_cards.append(card)
         tableau.add_entry_to_grid(-1, card, 1)
 
+tableau.print_grid()
+tableau.update()
+print()
 tableau.print_grid()

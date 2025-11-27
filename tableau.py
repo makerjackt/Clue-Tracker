@@ -65,6 +65,8 @@ class Tableau:
                 assert len(self.open_in_column(location)) > self._hand_size, \
                 f"Tableau given information that prevents player {location} from having {self._hand_size} cards"
             self._grid[location][card] = state
+    def check_grid(self, location, card):
+        return self._grid[location][card]
     def print_grid(self):
         for c in range(self._num_cards):
             for l in range(-1, self._num_players + 1):
@@ -73,12 +75,14 @@ class Tableau:
                     s = " " + s
                 print(s, end = "  ")
             print()
-    def open_in_column(self, location):
-        # return list of cards in column that have state 0 or 1
-        return [c for c in range(self._num_cards) if self._grid[location][c] >= 0]
-    def open_in_row(self, card):
-        # return list of location in row that have state 0 or 1
-        return [l for l in range(-1, self._num_players + 1) if self._grid[l][card] >= 0]
+    def search_column(self, location, condition):
+        # condition int or tuple of ints
+        return [c for c in range(self._num_cards) 
+                if (self._grid[location][c] == condition if type(condition) == int else self._grid[location][c] in condition)]
+    def search_row(self, card, condition):
+        # condition int or tuple of ints
+        return [l for l in range(-1, self._num_players + 1) 
+                if (self._grid[l][card] == condition if type(condition) == int else self._grid[l][card] in condition)]
     def add_entries_to_grid(self, locations, cards, states):
         # At least one of players, cards, states should be iterable 
         assert type(locations) != int or type(cards) != int or type(states) != int, "add_entries_to_grid not given any iterables"
@@ -90,3 +94,107 @@ class Tableau:
             states = repeat(states)
         for l, c, s in zip(locations, cards, states):
             self.add_entry_to_grid(l, c, s)
+    def iterate_leftover(self) -> bool:
+        # Returns true if new information is found
+        if self._column_states[-1]:
+            return False
+        open_in_leftover = len(self.search_column(-1, (0, 1)))
+        assert open_in_leftover >= self._num_leftover_cards, "In Tableau it is not possible to have enough leftover cards"
+        if open_in_leftover == self._num_leftover_cards: 
+            self._column_states[-1] = True
+            for c in range(self._num_cards):
+                if self._grid[-1][c] == 0:
+                    self.add_entry_to_grid(-1, c, 1)
+            return True
+        definite_in_leftover = len(self.search_column(-1, 1))
+        assert definite_in_leftover <= self._num_leftover_cards, "In Tableau too many cards have been set as leftover cards"
+        if definite_in_leftover == self._num_leftover_cards:
+            self._column_states[-1] = True
+            for c in range(self._num_cards):
+                if self._grid[-1][c] == 0:
+                    self.add_entry_to_grid(-1, c, -1)
+            return True
+        return False
+    def iterate_players(self) -> bool:
+        # Returns true if new information is found
+        iterated = False
+        for p in range(1, self._num_players + 1):
+            if self._column_states[p]:
+                continue
+            open_in_hand = len(self.search_column(p, (0, 1)))
+            assert open_in_hand >= self._hand_size, \
+            f"In Tableau it is not possible to have enough cards in player {p}'s hand"
+            if open_in_hand == self._hand_size: 
+                self._column_states[p] = True
+                for c in range(self._num_cards):
+                    if self._grid[p][c] == 0:
+                        self.add_entry_to_grid(p, c, 1)
+                return True
+            definite_in_hand = len(self.search_column(p, 1))
+            assert definite_in_hand <= self._hand_size, \
+            f"In Tableau too many cards have been put in player {p}'s hand"
+            if definite_in_hand == self._hand_size:
+                self._column_states[p] = True
+                for c in range(self._num_cards):
+                    if self._grid[p][c] == 0:
+                        self.add_entry_to_grid(p, c, -1)
+                return True
+        return False
+    def iterate_secret(self) -> bool:
+        if self._column_states[0]:
+            return False
+        all_catagories_complete = True
+        iterated = False
+        for catagory in range(self._num_catagories):
+            cards_in_catagory = [c for c in range(self._num_cards) if self._card_to_catagory[c] == catagory]
+            catagory_incomplete = len([c for c in self.search_column(0, 0) if c in cards_in_catagory]) > 0
+            all_catagories_complete = all_catagories_complete and not catagory_incomplete
+            if catagory_incomplete:
+                # if this succeeds, the catagory is incomplete
+                open_in_catagory = len([c for c in self.search_column(0, (0, 1)) if c in cards_in_catagory])
+                assert open_in_catagory >= 1, f"In Tableau secret envelope cannot have a card of catagory {catagory}"
+                if open_in_catagory == 1:
+                    for c in cards_in_catagory:
+                        if self._grid[0][c] == 0:
+                            self.add_entry_to_grid(0, c, 1)
+                    iterated = True
+                    continue
+                definite_in_catagory = len([c for c in self.search_column(0, 1) if c in cards_in_catagory])
+                assert definite_in_catagory <= 1, \
+                f"In Tableau secret envelope has more than one a card of catagory {catagory}"
+                if definite_in_catagory == 1:
+                    for c in cards_in_catagory:
+                        if self._grid[0][c] == 0:
+                            self.add_entry_to_grid(0, c, -1)
+                    iterated = True
+        self._column_states[0] = all_catagories_complete # only true after iteration if all catagories are complete
+        return iterated
+    def satisfy_players(self) -> bool:
+        pass
+    def satisfy_collective(self) -> bool:
+        pass
+    def update(self):
+        # update is how the Tableau deduces new information about the location of the cards.
+        # It loops through each deduction step, and if new information is discovered
+        # then the loop restarts. If all the deduction steps are completed and no new
+        # information is discovered, then the loop is exited.
+        while True:
+            # do basic checks on the leftover cards column
+            if self.iterate_leftover():
+                continue
+            # do basic checks on the secret cards column
+            if self.iterate_secret():
+                continue
+            # do basic checks on each player column
+            if self.iterate_players():
+                continue
+            # checks conditions on each individual players hand to see if any information can be found
+            # e.g. A player must have a certain card in their hand, or they must not have a certain card
+            if self.satisfy_players():
+                continue
+            # checks conditions on all players together to see if any information can be found
+            # e.g. A certain player must have a certain card in their hand, or
+            # a certain player must not have a certain card in their hand
+            if self.satisfy_collective():
+                continue
+
