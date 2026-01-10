@@ -1,5 +1,8 @@
 from assignment import Assignment
-from itertools import repeat
+from itertools import repeat, combinations
+
+def cards_satisfy_cond(cards, condition):
+    return any([c in cards for c in condition])
 
 class Tableau:
     """
@@ -37,7 +40,7 @@ class Tableau:
         self._row_states = [False for _ in range(self._num_cards)]
         self._conditions = {i:[] for i in range(1, num_players + 1)}
         self._assignment = Assignment(num_players, card_to_catagory)
-    def add_entry_to_grid(self, location, card, state):
+    def add_entry_to_grid(self, location: int, card: int, state: int):
         assert state in (-1, 1), "Invalid state given to Tableau"
         if self._grid[location][card] != 0:
             assert self._grid[location][card] == state, "Contradictory entry given to Tableau"
@@ -141,6 +144,7 @@ class Tableau:
             f"In Tableau it is not possible to have enough cards in player {p}'s hand"
             if open_in_hand == self._hand_size: 
                 self._column_states[p] = True
+                self._conditions[p] = []
                 for c in range(self._num_cards):
                     if self._grid[p][c] == 0:
                         self.add_entry_to_grid(p, c, 1)
@@ -150,6 +154,7 @@ class Tableau:
             f"In Tableau too many cards have been put in player {p}'s hand"
             if definite_in_hand == self._hand_size:
                 self._column_states[p] = True
+                self._conditions[p] = []
                 for c in range(self._num_cards):
                     if self._grid[p][c] == 0:
                         self.add_entry_to_grid(p, c, -1)
@@ -185,15 +190,53 @@ class Tableau:
         self._column_states[0] = all_catagories_complete # only true after iteration if all catagories are complete
         return iterated
     def iterate_cards(self) -> bool:
-        pass
+        for c in range(self._num_cards):
+            if self._row_states[c]:
+                continue
+            open_in_row = len(self.search_row(c, (0, 1)))
+            assert open_in_row >= 1, f"In Tableau, there is no location for card {c}"
+            if open_in_row == 1:
+                self._row_states[c] = True
+                for l in range(-1, self._num_players + 1):
+                    if self._grid[l][c] == 0:
+                        self.add_entry_to_grid(l, c, 1)
+                        # only one location in row is open, so we can break
+                        break
+                # since the grid was updated, we return 
+                return True
+        return False
     def satisfy_players(self) -> bool:
         for p in range(1, self._num_players + 1):
+            if self._column_states[p]:
+                continue
+            not_in_hand = self.search_column(p, -1)
+            maybe_in_hand = self.search_column(p, 0)
+            definite_in_hand = tuple(self.search_column(p, 1))
+            remaining_hand_size = self._hand_size - len(definite_in_hand)
+            assert remaining_hand_size >= 0, f"In Tableau, player {p} has too big of a hand"
+            # first we remove conditions that are already satisfied since they aren't relevant anymore
+            # we also simplify conditions by removing clauses that cannot be satisfied, e.g.
+            # player has White or Knife or Ballroom and Ballroom is in not_in_hand so 
+            # player has White or Ballroom
+            i = 0
+            while i < len(self._conditions[p]):
+                if cards_satisfy_cond(definite_in_hand, self._conditions[p][i]):
+                    self._conditions[p].pop(i)
+                    continue
+                new_condition = tuple([c for c in self._conditions[p][i] if not c in not_in_hand])
+                assert len(new_condition) > 0, "In Tableau, a condition that cannot be satisfied has been found"
+                if len(new_condition) == 1:
+                    # a condition with one card means player p has that card in their hand, thus new information is found
+                    self.add_entry_to_grid(p, new_condition[0], 1)
+                    return True
+                i += 1
             if len(self._conditions[p]) == 0:
                 # if there are no conditions, any assignment is valid
                 continue
-            unkown_cards = self.unkown_cards()
+            # at this stage there are some remaining non-trivial conditions
+        return False
     def satisfy_collective(self) -> bool:
-        pass
+        return False
     def update(self):
         # update is how the Tableau deduces new information about the location of the cards.
         # It loops through each deduction step, and if new information is discovered
@@ -222,4 +265,3 @@ class Tableau:
             if self.satisfy_collective():
                 continue
             break
-
